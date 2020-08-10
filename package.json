@@ -1,5 +1,5 @@
 {
-  "name": "cdktf-alicloud-demo",
+  "name": "alicloud-demo",
   "version": "1.0.0",
   "main": "main.js",
   "types": "main.ts",

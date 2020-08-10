@@ -12,83 +12,104 @@ import {
   Eip,
   EipAssociation,
 } from './.gen/providers/alicloud';
-import { AccessKey, SecretKey, } from './key';
-
-const resourceGroup = 'rg-...';
 
 class MyStack extends TerraformStack {
-  constructor(scope: Construct, name: string) {
+  resourceGroup: string;
+  imageId: string;
+  keyName: string;
+  vpcs: {[id: string]: Vpc} = {}
+  securityGroups: {[id: string]: SecurityGroup} = {};
+  vswitches: {[id: string]: Vswitch} = {};
+
+  constructor(scope: Construct, name: string, accessKey: string, secretKey: string,
+     region: string, resourceGroup: string) {
     super(scope, name);
 
+    this.resourceGroup = resourceGroup;
+
     new AlicloudProvider(this, 'alicloud', {
-      region: 'cn-hangzhou',
-      accessKey: AccessKey,
-      secretKey: SecretKey,
+      region,
+      accessKey,
+      secretKey,
     });
 
-    const vpc = new Vpc(this, 'test-vpc', {
-      resourceGroupId: resourceGroup,
-      name: 'test',
-      cidrBlock: '172.16.0.0/12',
+    this.imageId = new DataAlicloudImages(this, 'images-debian-10', {
+      owners: 'self',
+      nameRegex: '^debian-10$',
+    }).images('0').id;
+
+    this.keyName = new KeyPair(this, 'key-pair-test', {
+      resourceGroupId: this.resourceGroup,
+      keyName: 'test',
+      publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...',
+    }).keyName!;
+  }
+
+  createVpc(name: string, cidrBlock: string, vswitches: {[id: string]: string}) {
+    this.vpcs[name] = new Vpc(this, `vpc-${name}`, {
+      resourceGroupId: this.resourceGroup,
+      name,
+      cidrBlock,
     });
 
-    const vswitch = new Vswitch(this, 'test-vswitch', {
-      vpcId: vpc.id!,
-      cidrBlock: '172.16.0.0/21',
-      availabilityZone: 'cn-hangzhou-h',
+    this.securityGroups[name] = new SecurityGroup(this, `security-group-${name}`, {
+      resourceGroupId: this.resourceGroup,
+      name,
+      vpcId: this.vpcs[name].id,
     });
 
-    const securityGroup = new SecurityGroup(this, 'test-security-group', {
-      resourceGroupId: resourceGroup,
-      name: 'test',
-      vpcId: vpc.id,
-    });
-
-    new SecurityGroupRule(this, 'test-security-group-rule', {
+    new SecurityGroupRule(this, `security-group-rule-${name}`, {
       type: 'ingress',
       ipProtocol: 'tcp',
       cidrIp: '0.0.0.0/0',
       portRange: '22/22',
-      securityGroupId: securityGroup.id!,
+      securityGroupId: this.securityGroups[name].id!,
     });
 
-    const keypair = new KeyPair(this, 'test-keypair', {
-      resourceGroupId: resourceGroup,
-      keyName: 'test',
-      publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...',
-    });
+    for (let availabilityZone in vswitches) {
+      let cidrBlock = vswitches[availabilityZone];
+      this.vswitches[`${name}-${availabilityZone}`] = new Vswitch(this, `vswitch-${name}-${availabilityZone}`, {
+        vpcId: this.vpcs[name].id!,
+        cidrBlock,
+        availabilityZone,
+      });
+    }
+  }
 
-    const images = new DataAlicloudImages(this, 'test-images', {
-      owners: 'self',
-      nameRegex: '^debian-10$',
-    });
-
-    const instance = new Instance(this, 'test-instance', {
-      resourceGroupId: resourceGroup,
-      availabilityZone: 'cn-hangzhou-h',
-      securityGroups: [securityGroup.id!],
-      instanceType: 'ecs.t5-lc2m1.nano',
+  createInstance(name: string, vpcName: string, availabilityZone: string, type='ecs.t5-lc2m1.nano') {
+    const instance = new Instance(this, `instance-${name}`, {
+      resourceGroupId: this.resourceGroup,
+      availabilityZone,
+      securityGroups: [this.securityGroups[vpcName].id!],
+      instanceType: type,
       systemDiskSize: 20,
-      imageId: images.images('0').id,
-      instanceName: 'test',
-      vswitchId: vswitch.id,
-      keyName: keypair.keyName,
+      imageId: this.imageId,
+      instanceName: name,
+      vswitchId: this.vswitches[`${vpcName}-${availabilityZone}`].id,
+      keyName: this.keyName,
     });
 
-    const eip = new Eip(this, 'test-eip', {
-      resourceGroupId: resourceGroup,
+    const eip = new Eip(this, `eip-${name}`, {
+      resourceGroupId: this.resourceGroup,
       bandwidth: 5,
       internetChargeType: 'PayByTraffic',
     });
 
-    new EipAssociation(this, 'test-eip-association', {
+    new EipAssociation(this, `eip-association-${name}`, {
       allocationId: eip.id!,
       instanceId: instance.id!,
     });
-
-  }
+  };
 }
 
 const app = new App();
-new MyStack(app, 'cdktf-alicloud-demo');
+
+import { accessKey, secretKey } from './secret';
+const myStack = new MyStack(app, 'alicloud-demo', accessKey, secretKey,
+  'cn-hangzhou', 'rg-...');
+myStack.createVpc('vpc1', '172.16.0.0/12', {
+  'cn-hangzhou-h': '172.16.0.0/21',
+})
+myStack.createInstance('instance1', 'vpc1', 'cn-hangzhou-h');
+
 app.synth();
