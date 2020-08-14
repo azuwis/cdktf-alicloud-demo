@@ -1,25 +1,14 @@
 import { Construct } from 'constructs';
 import { App, TerraformStack } from 'cdktf';
-import { 
-  AlicloudProvider,
-  Vpc,
-  Vswitch,
-  SecurityGroup,
-  SecurityGroupRule,
-  KeyPair,
-  DataAlicloudImages,
-  Instance,
-  Eip,
-  EipAssociation,
-} from './.gen/providers/alicloud';
+import * as alicloud from './.gen/providers/alicloud';
 
 class MyStack extends TerraformStack {
   resourceGroup: string;
   imageId: string;
   keyName: string;
-  vpcs: {[id: string]: Vpc} = {}
-  securityGroups: {[id: string]: SecurityGroup} = {};
-  vswitches: {[id: string]: Vswitch} = {};
+  vpcs: {[id: string]: alicloud.Vpc} = {}
+  securityGroups: {[id: string]: alicloud.SecurityGroup} = {};
+  vswitches: {[id: string]: alicloud.Vswitch} = {};
 
   constructor(scope: Construct, name: string, accessKey: string, secretKey: string,
      region: string, resourceGroup: string) {
@@ -27,18 +16,18 @@ class MyStack extends TerraformStack {
 
     this.resourceGroup = resourceGroup;
 
-    new AlicloudProvider(this, 'alicloud', {
+    new alicloud.AlicloudProvider(this, 'alicloud', {
       region,
       accessKey,
       secretKey,
     });
 
-    this.imageId = new DataAlicloudImages(this, 'images-debian-10', {
+    this.imageId = new alicloud.DataAlicloudImages(this, 'images-debian-10', {
       owners: 'self',
       nameRegex: '^debian-10$',
     }).images('0').id;
 
-    this.keyName = new KeyPair(this, 'key-pair-test', {
+    this.keyName = new alicloud.KeyPair(this, 'key-pair-test', {
       resourceGroupId: this.resourceGroup,
       keyName: 'test',
       publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...',
@@ -46,19 +35,19 @@ class MyStack extends TerraformStack {
   }
 
   createVpc(name: string, cidrBlock: string, vswitches: {[id: string]: string}) {
-    this.vpcs[name] = new Vpc(this, `vpc-${name}`, {
+    this.vpcs[name] = new alicloud.Vpc(this, `vpc-${name}`, {
       resourceGroupId: this.resourceGroup,
       name,
       cidrBlock,
     });
 
-    this.securityGroups[name] = new SecurityGroup(this, `security-group-${name}`, {
+    this.securityGroups[name] = new alicloud.SecurityGroup(this, `security-group-${name}`, {
       resourceGroupId: this.resourceGroup,
       name,
       vpcId: this.vpcs[name].id,
     });
 
-    new SecurityGroupRule(this, `security-group-rule-${name}`, {
+    new alicloud.SecurityGroupRule(this, `security-group-rule-${name}`, {
       type: 'ingress',
       ipProtocol: 'tcp',
       cidrIp: '0.0.0.0/0',
@@ -68,7 +57,7 @@ class MyStack extends TerraformStack {
 
     for (let availabilityZone in vswitches) {
       let cidrBlock = vswitches[availabilityZone];
-      this.vswitches[`${name}-${availabilityZone}`] = new Vswitch(this, `vswitch-${name}-${availabilityZone}`, {
+      this.vswitches[`${name}-${availabilityZone}`] = new alicloud.Vswitch(this, `vswitch-${name}-${availabilityZone}`, {
         vpcId: this.vpcs[name].id!,
         cidrBlock,
         availabilityZone,
@@ -77,7 +66,7 @@ class MyStack extends TerraformStack {
   }
 
   createInstance(name: string, vpcName: string, availabilityZone: string, type='ecs.t5-lc2m1.nano') {
-    const instance = new Instance(this, `instance-${name}`, {
+    const instance = new alicloud.Instance(this, `instance-${name}`, {
       resourceGroupId: this.resourceGroup,
       availabilityZone,
       securityGroups: [this.securityGroups[vpcName].id!],
@@ -89,13 +78,13 @@ class MyStack extends TerraformStack {
       keyName: this.keyName,
     });
 
-    const eip = new Eip(this, `eip-${name}`, {
+    const eip = new alicloud.Eip(this, `eip-${name}`, {
       resourceGroupId: this.resourceGroup,
       bandwidth: 5,
       internetChargeType: 'PayByTraffic',
     });
 
-    new EipAssociation(this, `eip-association-${name}`, {
+    new alicloud.EipAssociation(this, `eip-association-${name}`, {
       allocationId: eip.id!,
       instanceId: instance.id!,
     });
