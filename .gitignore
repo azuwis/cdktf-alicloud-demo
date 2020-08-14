@@ -2,6 +2,7 @@
 *.js
 node_modules
 cdktf.out
+secret.ts
 terraform.tfstate*
 .gen
 .terraform
