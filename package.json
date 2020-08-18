@@ -21,12 +21,12 @@
     "node": ">=10.12"
   },
   "dependencies": {
-    "cdktf": "0.0.14",
+    "cdktf": "0.0.15",
     "constructs": "^3.0.4"
   },
   "devDependencies": {
     "@types/node": "^14.0.27",
-    "cdktf-cli": "0.0.14",
+    "cdktf-cli": "0.0.15",
     "typescript": "^3.9.7"
   }
 }
