@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
 import { App, TerraformStack } from 'cdktf';
 import * as alicloud from './.gen/providers/alicloud';
+import { accessKey, secretKey, account, publicKey } from './secret';
 
 class MyStack extends TerraformStack {
   account: string;
@@ -34,7 +35,7 @@ class MyStack extends TerraformStack {
 
     this.keyName = new alicloud.KeyPair(this, 'key-pair-test', {
       keyName: 'test',
-      publicKey: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...',
+      publicKey,
     }).keyName!;
   }
 
@@ -93,9 +94,8 @@ class MyStack extends TerraformStack {
 
 const app = new App();
 
-import { accessKey, secretKey } from './secret';
 const myStack = new MyStack(app, 'alicloud-demo', accessKey, secretKey,
-  'cn-hangzhou', '...');
+  'cn-hangzhou', account);
 myStack.createVpc('vpc1', '172.16.0.0/12', {
   'cn-hangzhou-h': '172.16.0.0/21',
 })
